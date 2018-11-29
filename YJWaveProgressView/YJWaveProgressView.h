@@ -34,6 +34,9 @@
 /** 文字颜色 */
 @property (nonatomic, strong) UIColor *textColor;
 
+/** 是否需要描述文字和百分比 默认YES */
+@property (nonatomic, assign) BOOL needDescriptionLable;
+
 /** 描述文字 */
 @property (nonatomic, copy  ) NSString *descriptionText;
 

@@ -109,13 +109,15 @@
 
 - (void)configureDrawingRects
 {
-    fullRect = CGRectMake(0, 0, self.bounds.size.width, self.bounds.size.height);
+    CGFloat maxFloatWithRect = MIN(self.bounds.size.width, self.bounds.size.height);
+    fullRect = CGRectMake(0, 0, maxFloatWithRect, maxFloatWithRect);
+    
     
     CGFloat offset = 0;
     waveRect = CGRectMake(offset,
                           offset,
-                          fullRect.size.width - 2 * offset,
-                          fullRect.size.height - 2 * offset);
+                          maxFloatWithRect - 2 * offset,
+                          maxFloatWithRect - 2 * offset);
 }
 
 
@@ -402,6 +404,14 @@
 - (void)setWaveLength:(CGFloat)waveLength {
     _waveLength = waveLength;
     [self setNeedsDisplay];
+}
+
+-(void)setNeedDescriptionLable:(BOOL)needDescriptionLable{
+    if (needDescriptionLable) {
+        [self addSubview:self.textLb];
+    }else{
+        [self.textLb removeFromSuperview];
+    }
 }
 
 #pragma mark - getter
