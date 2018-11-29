@@ -10,7 +10,7 @@
 <img src="https://github.com/mcyj1314/YJWaveProgressView/blob/master/screenshots/screenshot.gif" alt="">
    
 ## Installation
-* Installation with CocoaPods：`#pod 'YJWaveProgressView'`
+* Installation with CocoaPods：`pod 'YJWaveProgressView'`
 * Manual import：
     * Drag All files in the `YJWaveProgressView` folder to project
     * Import the main file：`#import "YJWaveProgressView.h"`
