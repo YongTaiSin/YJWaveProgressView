@@ -6,6 +6,9 @@
 <a href="https://github.com/mcyj1314/YJWaveProgressView/blob/master/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg?style=flat"></a>
 </p>
 
+## Demo
+<img src="https://github.com/mcyj1314/YJWaveProgressView/blob/master/screenshots/screenshot.gif" alt="">
+   
 ## Installation
 * Manual import：Installation with CocoaPods：`#pod 'YJWaveProgressView'`
 * Manual import：
