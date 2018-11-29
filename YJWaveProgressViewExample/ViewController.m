@@ -17,7 +17,7 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-
+    self.view.backgroundColor = [UIColor colorWithRed:0.165 green:0.659 blue:0.980 alpha:1.00];
     CGFloat size = 300;
     YJWaveProgressView *waveView = [[YJWaveProgressView alloc]initWithFrame:CGRectMake((self.view.bounds.size.width-size)/2, 0, size, size)];
     waveView.center = self.view.center;
