@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name         = "YJWaveProgressView"
-  s.version      = "1.0.0"
+  s.version      = "1.1.0"
   s.summary      = "一款圆形水波进度控件."
   s.description  = <<-DESC
 	一款圆形水波进度控件，高度支持可定制开发，支持自动布局
