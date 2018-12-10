@@ -21,13 +21,21 @@
     CGFloat size = 300;
     YJWaveProgressView *waveView = [[YJWaveProgressView alloc]initWithFrame:CGRectMake((self.view.bounds.size.width-size)/2, 0, size, size)];
     waveView.center = self.view.center;
-    waveView.waveLength = size*5/3;
+    // 水波颜色
     waveView.waterColor = [UIColor colorWithRed:107/255.0 green:194/255.0 blue:53/255.0 alpha:1];
+    // 水波背景颜色
     waveView.waterBgColor = [UIColor colorWithRed:107/255.0 green:194/255.0 blue:53/255.0 alpha:0.6];
+    // 设置描述文字
     waveView.descriptionText = @"汽车当前电量";
-    waveView.progress = 0.8;
+    // 显示刻度
+    waveView.showScale = YES;
+    // 时钟刻度样式
+    waveView.scaleStyle = YJWaveScaleStyle_Clock;
+    // 允许重力感应
+    waveView.allowCoreMotion = YES;
+    // 设置进度
+    waveView.progress = 0.6;
     [self.view addSubview:waveView];
 }
-
 
 @end

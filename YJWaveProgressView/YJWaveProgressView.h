@@ -8,6 +8,12 @@
 
 #import <UIKit/UIKit.h>
 
+typedef NS_ENUM(NSInteger,YJWaveScaleStyle){
+    /// 默认
+    YJWaveScaleStyle_Default,
+    /// 时钟
+    YJWaveScaleStyle_Clock,
+};
 @interface YJWaveProgressView : UIView
 
 /** 进度 (0 ~ 1) */
@@ -51,6 +57,38 @@
 
 /** 百分比属性文本 */
 @property (nonatomic, copy  ) NSAttributedString *percentageAttributedText;
+
+/** 是否显示刻度表盘 默认为NO */
+@property (nonatomic, assign) BOOL showScale;
+
+/** 刻度到圆形水波的距离 默认为10 */
+@property (nonatomic, assign) CGFloat waveMargin;
+
+/** 刻度长度 默认为10 */
+@property (nonatomic, assign) CGFloat scaleLength;
+
+/** 刻度宽度 默认为2 */
+@property (nonatomic, assign) CGFloat scaleWidth;
+
+/** 刻度的个数 默认为100 */
+@property (nonatomic, assign) CGFloat scaleCount;
+
+/** 刻度线背景色 */
+@property (nonatomic, strong) UIColor *scaleBgColor;
+
+/** 刻度线颜色 */
+@property (nonatomic, strong) UIColor *scaleColor;
+
+/** 刻度的样式 */
+@property (nonatomic, assign) YJWaveScaleStyle scaleStyle;
+
+/** 是否允许重力感应 默认为NO */
+@property (nonatomic, assign) BOOL allowCoreMotion;
+
+//  开始波动
+- (void)startWave;
+//  停止波动
+- (void)stopWave;
 
 @end
 

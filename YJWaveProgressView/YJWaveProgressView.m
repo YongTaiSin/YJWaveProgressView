@@ -22,29 +22,50 @@
 */
 
 #import "YJWaveProgressView.h"
+#import <CoreMotion/CoreMotion.h>
 
 @interface YJWaveProgressView()
 {
     CGRect fullRect;            // 视图frame
+    CGRect scaleRect;           // 刻度frame
     CGRect waveRect;            // 水波frame
     
+    CGFloat currentPercent;     // 当前百分比，用于保存第一次显示时的动画效果
     CGFloat currentWavePointY;  // 当前波浪上市高度Y（高度从大到小 坐标系向下增长）
     CGFloat offsetX;            // 波浪x位移
     
     float variable;             // 可变参数 更加真实 模拟波纹
     BOOL increase;              // 增减变化
     
+    CGAffineTransform currentTransform;
 }
 
 /// 刷新定时器
 @property (nonatomic, strong) CADisplayLink *displayLink;
 
+/// 重力感应管理
+@property (nonatomic, strong) CMMotionManager *motionManager;
+/// 最新偏航角
+@property (nonatomic) float motionLastYaw;
+
 /// 水波背景层
 @property (nonatomic, strong) CAShapeLayer *waveBackLayer;
 /// 水波层
 @property (nonatomic, strong) CAShapeLayer *waveLayer;
-/// 圆形遮罩
-@property (nonatomic, strong) CAShapeLayer *maskLayer;
+
+/// 刻度背景层
+@property (nonatomic, strong) CAShapeLayer *scaleBackLayer;
+/// 刻度层
+@property (nonatomic, strong) CAShapeLayer *scaleLayer;
+/// 左边刻度
+@property (nonatomic, strong) CAShapeLayer *scaleLeftLayer;
+/// 右边刻度
+@property (nonatomic, strong) CAShapeLayer *scaleRightLayer;
+/// 左边刻度遮罩
+@property (nonatomic, strong) CAShapeLayer *scaleLeftMaskLayer;
+/// 右边刻度遮罩
+@property (nonatomic, strong) CAShapeLayer *scaleRightMaskLayer;
+
 /// 文字
 @property (nonatomic, strong) UILabel *textLb;
 
@@ -65,6 +86,10 @@
     return self;
 }
 
+- (void)dealloc{
+    [self stopWave];
+}
+
 - (void)initialize
 {
     // 进度
@@ -78,10 +103,26 @@
     // 上升速度
     _waveGrowth = 0.85;
     
+    // 是否显示刻度表
+    _showScale = NO;
+    // 刻度长度
+    _scaleLength = 10;
+    // 刻度宽度
+    _scaleWidth = 2;
+    // 刻度个数
+    _scaleCount = 60;
+    // 刻度到圆形水波的距离
+    _waveMargin = 10;
+    
     // 水波颜色
     _waterColor = [UIColor colorWithRed:0.325 green:0.392 blue:0.729 alpha:1.00];
     // 波浪背景填充色
     _waterBgColor = [UIColor colorWithRed:0.259 green:0.329 blue:0.506 alpha:1.00];
+    
+    // 刻度背景颜色
+    _scaleBgColor = [UIColor colorWithRed:0.694 green:0.745 blue:0.867 alpha:1.00];
+    // 刻度颜色
+    _scaleColor = [UIColor colorWithRed:0.969 green:0.937 blue:0.227 alpha:1.00];
     
     // 文字颜色
     _textColor = [UIColor whiteColor];
@@ -94,14 +135,26 @@
     increase = NO;
     // 移动距离
     offsetX = 0;
+    
+    // 最新偏航
+    self.motionLastYaw = 0;
+    
+    [self configureDrawingRects];
 }
 
 - (void)setupLayer{
+    // 添加刻度背景层
+    [self.layer addSublayer:self.scaleBackLayer];
+    // 添加刻度层
+    [self.layer addSublayer:self.scaleLayer];
+    [self.scaleLayer addSublayer:self.scaleLeftLayer];
+    [self.scaleLayer addSublayer:self.scaleRightLayer];
+    
     // 添加背景层
     [self.layer addSublayer:self.waveBackLayer];
     
     // 添加水波层
-    [self.layer addSublayer:self.waveLayer];
+    [self.waveBackLayer addSublayer:self.waveLayer];
     
     // 添加文本
     [self addSubview:self.textLb];
@@ -109,11 +162,19 @@
 
 - (void)configureDrawingRects
 {
-    fullRect = CGRectMake(0, 0, self.bounds.size.width, self.bounds.size.height);
+    CGFloat size = MIN(self.bounds.size.width, self.bounds.size.height);
+    CGFloat x = (self.bounds.size.width - size) / 2;
+    CGFloat y = (self.bounds.size.height - size) / 2;
+    fullRect = CGRectMake(x, y, size, size);
+    scaleRect = fullRect;
     
+
     CGFloat offset = 0;
-    waveRect = CGRectMake(offset,
-                          offset,
+    if (_showScale) {
+        offset = _waveMargin + _scaleLength;
+    }
+    waveRect = CGRectMake(x+offset,
+                          y+offset,
                           fullRect.size.width - 2 * offset,
                           fullRect.size.height - 2 * offset);
 }
@@ -124,7 +185,7 @@
 - (void)updateWave:(CADisplayLink *)displayLink {
     [self animateWave];
     [self updateWaveY];
-    [self setNeedsDisplay];
+    [self drawWave];
 }
 
 // 动态改变波形参数
@@ -170,8 +231,13 @@
         return;
     }
     //以屏幕刷新速度为周期刷新曲线的位置
-    _displayLink = [CADisplayLink displayLinkWithTarget:[YJWeakProxy proxyWithTarget:self] selector:@selector(updateWave:)];
+    YJWeakProxy *proxy = [YJWeakProxy proxyWithTarget:self];
+    _displayLink = [CADisplayLink displayLinkWithTarget:proxy selector:@selector(updateWave:)];
     [_displayLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
+    if (_allowCoreMotion) {
+        //允许重力感应
+        [self startGravity];
+    }
 }
 
 // 停止波动
@@ -180,6 +246,59 @@
         [_displayLink invalidate];
         _displayLink = nil;
     }
+    [self stopGravity];
+}
+
+#pragma mark - motion
+- (void)startGravity
+{
+    [self stopGravity];
+    if ([self.motionManager isDeviceMotionAvailable]) {
+        // to avoid using more CPU than necessary we use ``CMAttitudeReferenceFrameXArbitraryZVertical``
+        typeof(self) __weak weakSelf = self;
+        [self.motionManager startDeviceMotionUpdatesUsingReferenceFrame:CMAttitudeReferenceFrameXArbitraryZVertical toQueue:[NSOperationQueue currentQueue] withHandler: ^(CMDeviceMotion *motion, NSError *error){
+            [weakSelf motionRefresh];
+        }];
+        
+    }
+}
+- (void)stopGravity
+{
+    _motionLastYaw = 0;
+    if ([_motionManager isDeviceMotionActive])
+        [_motionManager stopDeviceMotionUpdates];
+}
+- (void)motionRefresh
+{
+    // compute the device yaw from the attitude quaternion
+    // http://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles
+    CMQuaternion quat = self.motionManager.deviceMotion.attitude.quaternion;
+    double yaw = asin(2*(quat.x*quat.z - quat.w*quat.y));
+    
+    // TODO improve the yaw interval (stuck to [-PI/2, PI/2] due to arcsin definition
+    
+    yaw *= -1;      // reverse the angle so that it reflect a *liquid-like* behavior
+    
+    if (_motionLastYaw == 0) {
+        _motionLastYaw = yaw;
+    }
+    
+    // 空间位置的四元数
+    // kalman filtering
+    static float q = 0.1;   // process noise
+    static float s = 0.1;   // sensor noise
+    static float p = 0.1;   // estimated error
+    static float k = 0.5;   // kalman filter gain
+    
+    float x = _motionLastYaw;
+    p = p + q;
+    k = p / (p + s);
+    x = x + k*(yaw - x);
+    p = (1 - k)*p;
+    
+    CGAffineTransform newTransform = CGAffineTransformRotate(currentTransform,-x);
+    _waveLayer.affineTransform = newTransform;
+    _motionLastYaw = x;
 }
 
 #pragma mark - private methods
@@ -249,51 +368,127 @@
     return attrText;
 }
 
-/**
- *  根据圆心点和圆上一个点计算角度
- *
- *  @param centerPoint 圆心点
- *  @param point       圆上的一个点
- *
- *  @return 角度
- */
-- (CGFloat)calculateRotateDegree:(CGPoint)centerPoint point:(CGPoint)point {
-    
-    CGFloat rotateDegree = asin(fabs(point.y - centerPoint.y) / (sqrt(pow(point.x - centerPoint.x, 2) + pow(point.y - centerPoint.y, 2))));
-    
-    //如果point纵坐标大于原点centerPoint纵坐标(在第一和第二象限)
-    if (point.y > centerPoint.y) {
-        //第一象限
-        if (point.x >= centerPoint.x) {
-            rotateDegree = rotateDegree;
-        }
-        //第二象限
-        else {
-            rotateDegree = M_PI - rotateDegree;
-        }
-    } else //第三和第四象限
-    {
-        if (point.x <= centerPoint.x) //第三象限，不做任何处理
-        {
-            rotateDegree = M_PI + rotateDegree;
-        }
-        else //第四象限
-        {
-            rotateDegree = 2 * M_PI - rotateDegree;
-        }
-    }
-    return rotateDegree;
-}
-
 #pragma mark - draw
 - (void)drawRect:(CGRect)rect
 {
     [super drawRect:rect];
     
+    [self drawBezierPath];
+}
+
+- (void)drawBezierPath{
+    if (_showScale) {
+        [self drawScaleBackground];
+        [self drawScale];
+    }
     [self drawWaveBackground];
     [self drawWave];
-    [self drawLabel];
+    [self drawText];
+}
 
+/**
+ 画刻度盘
+ 
+ @param scaleColor 刻度颜色
+ @param isLeft 是否是左边的刻度盘
+ @return 刻度layer数组
+ */
+- (NSArray <CAShapeLayer *>*)drawScaleWithColor:(UIColor *)scaleColor isLeft:(BOOL)isLeft{
+    NSMutableArray *scaleArr = [NSMutableArray array];
+    int section = _scaleCount / 2;
+    int count = section + 1;
+    CGFloat perAngle = M_PI / section;
+    CGPoint centerPoint = CGPointMake(scaleRect.size.width / 2, scaleRect.size.height / 2);
+    if (!isLeft) { //右边的圆心坐标
+        centerPoint = CGPointMake(0, scaleRect.size.height / 2);
+    }
+    CGFloat radius = (scaleRect.size.width - _scaleLength) / 2;
+    // 我们需要计算出每段弧线的起始角度和结束角度
+    //角(弧度) = 弧长/半径
+    for (int i = 0; i< count; i++) {
+        CGFloat startAngel = 0;
+        if (isLeft) {
+            startAngel = M_PI_2 + perAngle * i;
+            if (i == count - 1) {
+                startAngel = M_PI_2 + perAngle * i - (_scaleWidth / 2) / radius;
+            }
+        }else{
+            startAngel = M_PI_2 - perAngle * i;
+            if (i == count - 1) {
+                startAngel = M_PI_2 - perAngle * i + (_scaleWidth / 2) / radius;
+            }
+        }
+        CGFloat endAngel = 0;
+        if (isLeft) {
+            endAngel = startAngel + _scaleWidth / radius;
+            if (i == 0 || i == count - 1) {
+                endAngel = startAngel + (_scaleWidth / 2) / radius;
+            }
+        }else{
+            endAngel = startAngel - _scaleWidth / radius;
+            if (i == 0 || i == count - 1) {
+                endAngel = startAngel - (_scaleWidth / 2) / radius;
+            }
+        }
+        UIBezierPath *tickPath = [UIBezierPath bezierPathWithArcCenter:centerPoint radius:radius startAngle:startAngel endAngle:endAngel clockwise:isLeft?YES:NO];
+        CAShapeLayer *perLayer = [CAShapeLayer layer];
+        perLayer.strokeColor = scaleColor.CGColor;
+        perLayer.lineWidth = _scaleLength;
+        if (_scaleStyle == YJWaveScaleStyle_Clock) {
+            if (i % 5 == 0) {
+                perLayer.lineWidth = _scaleLength;
+            }else{
+                perLayer.lineWidth = _scaleLength / 2;
+            }
+        }
+        perLayer.path = tickPath.CGPath;
+        [scaleArr addObject:perLayer];
+    }
+    return scaleArr;
+}
+
+/**
+ *  画刻度背景
+ *
+ */
+- (void)drawScaleBackground{
+    [self.scaleBackLayer.sublayers makeObjectsPerformSelector:@selector(removeFromSuperlayer)];
+    CALayer *leftLayer = [CALayer layer];
+    leftLayer.frame = CGRectMake(0, 0, scaleRect.size.width / 2, scaleRect.size.height);
+    [self.scaleBackLayer addSublayer:leftLayer];
+    CALayer *rightLayer = [CALayer layer];
+    rightLayer.frame = CGRectMake(scaleRect.size.width / 2, 0, scaleRect.size.width / 2, scaleRect.size.height);
+    [self.scaleBackLayer addSublayer:rightLayer];
+    // 画左边的刻度盘
+    leftLayer.sublayers = [self drawScaleWithColor:_scaleBgColor isLeft:YES];
+    
+    // 画右边的刻度盘
+    rightLayer.sublayers = [self drawScaleWithColor:_scaleBgColor isLeft:NO];
+}
+
+/**
+ *  画刻度
+ *
+ */
+- (void)drawScale{
+    [self.scaleLeftLayer.sublayers makeObjectsPerformSelector:@selector(removeFromSuperlayer)];
+    [self.scaleRightLayer.sublayers makeObjectsPerformSelector:@selector(removeFromSuperlayer)];
+    
+    // 画左边的刻度盘
+    self.scaleLeftLayer.sublayers = [self drawScaleWithColor:_scaleColor isLeft:YES];
+    
+    // 画右边的刻度盘
+    self.scaleRightLayer.sublayers = [self drawScaleWithColor:_scaleColor isLeft:NO];
+    
+    //左边的圆心坐标
+    CGPoint leftCenterPoint = CGPointMake(scaleRect.size.width / 2, scaleRect.size.height / 2);
+    //右边的圆心坐标
+    CGPoint rightCenterPoint = CGPointMake(0, scaleRect.size.height / 2);
+    CGFloat radius = (scaleRect.size.width - _scaleLength) / 2;
+    UIBezierPath *leftPath = [UIBezierPath bezierPathWithArcCenter:leftCenterPoint radius:radius startAngle:M_PI_2 endAngle:-M_PI_2 clockwise:YES];
+    self.scaleLeftMaskLayer.path = leftPath.CGPath;
+    UIBezierPath *rightPath = [UIBezierPath bezierPathWithArcCenter:rightCenterPoint radius:radius startAngle:M_PI_2 endAngle:-M_PI_2 clockwise:NO];
+    self.scaleRightMaskLayer.path = rightPath.CGPath;
 }
 
 /**
@@ -323,19 +518,29 @@
     CGPoint centerPoint = CGPointMake(waveRect.size.width / 2, waveRect.size.height / 2);
     CGFloat radius = waveRect.size.width / 2;
     UIBezierPath *path = [UIBezierPath bezierPathWithArcCenter:centerPoint radius:radius startAngle:0 endAngle:2*M_PI clockwise:YES];
-    self.maskLayer.path = path.CGPath;
+    CAShapeLayer *mask = [CAShapeLayer layer];
+    mask.path = path.CGPath;
+    self.waveLayer.mask = mask;
     
+    CGFloat waveLength = _waveLength;
+    if (waveLength==0) {
+        CGFloat radius = waveRect.size.width/2;
+        CGFloat distanceToOrigin = fabs((currentWavePointY-radius));
+        CGFloat mindistanceToOrigin = fabs((waveRect.size.height*0.2-radius));
+        CGFloat minWaveLength = 2 * 2 * sqrtf(powf(radius, 2) - powf(mindistanceToOrigin, 2));
+        waveLength = 2 * 2 * sqrtf(powf(radius, 2) - powf(distanceToOrigin, 2));
+        waveLength = MAX(minWaveLength, waveLength);
+    }
     CGMutablePathRef wavePath = CGPathCreateMutable();
     
     //画水
-    CGFloat waterWaveHeight = waveRect.size.height * _progress;
     CGFloat waterWaveWidth = waveRect.size.width;
-    CGPathMoveToPoint(wavePath, nil, 0, waterWaveHeight);
+    CGPathMoveToPoint(wavePath, nil, 0, currentWavePointY);
     CGFloat y = 0.0f;
     
     waterWaveWidth = waveRect.size.width;
     for(float x = 0; x <= waterWaveWidth; x++){
-        y =  variable * amplitude* sinf((2*M_PI/_waveLength) * x - offsetX * M_PI / 180) + currentWavePointY;
+        y =  variable * amplitude* sinf((2*M_PI/waveLength) * x - offsetX * M_PI / 180) + currentWavePointY;
         CGPathAddLineToPoint(wavePath, nil, x, y);
     }
     
@@ -349,10 +554,10 @@
 }
 
 /**
- *  文本
+ *  绘制文本
  *
  */
-- (void)drawLabel {
+- (void)drawText {
     
     NSMutableAttributedString *attributedText = [[NSMutableAttributedString alloc] init];
     if (_percentageAttributedText.length) {
@@ -378,10 +583,28 @@
 }
 
 #pragma mark - setter
-
 - (void)setProgress:(CGFloat)progress {
     _progress = progress;
+    // 开始抖波
     [self startWave];
+    // 重绘文本
+    [self drawText];
+    
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        // 刻度动画
+        CABasicAnimation *animation = [CABasicAnimation animationWithKeyPath:@"strokeEnd"];
+        animation.duration = 3;
+        animation.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut];
+        animation.fromValue = @(self->currentPercent);
+        animation.toValue = @(self.progress);
+        animation.fillMode = kCAFillModeForwards;
+        animation.removedOnCompletion = NO;
+        self->currentPercent = self.progress;
+        [self.scaleLeftMaskLayer addAnimation:animation forKey:@"strokeEndAnimation"];
+        [self.scaleRightMaskLayer addAnimation:animation forKey:@"strokeEndAnimation"];
+    });
+    
+   
 }
 
 - (void)setWaterBgColor:(UIColor *)waterBgColor {
@@ -394,14 +617,50 @@
     self.waveLayer.fillColor = waterColor.CGColor;
 }
 
-- (void)setAmplitude:(CGFloat)amplitude {
-    _amplitude = amplitude;
-    [self setNeedsDisplay];
+- (void)setTextColor:(UIColor *)textColor{
+    _textColor = textColor;
+    [self drawText];
 }
 
-- (void)setWaveLength:(CGFloat)waveLength {
-    _waveLength = waveLength;
-    [self setNeedsDisplay];
+- (void)setDescriptionText:(NSString *)descriptionText{
+    _descriptionText = [descriptionText copy];
+    [self drawText];
+}
+
+- (void)setDescriptionFont:(UIFont *)descriptionFont{
+    _descriptionFont = descriptionFont;
+    [self drawText];
+}
+
+- (void)setNumberFont:(UIFont *)numberFont{
+    _numberFont = numberFont;
+    [self drawText];
+}
+
+- (void)setPercentFont:(UIFont *)percentFont{
+    _percentFont = percentFont;
+    [self drawText];
+}
+
+- (void)setDescriptionAttributedText:(NSAttributedString *)descriptionAttributedText{
+    _descriptionAttributedText = [descriptionAttributedText copy];
+    [self drawText];
+}
+
+- (void)setPercentageAttributedText:(NSAttributedString *)percentageAttributedText{
+    _percentageAttributedText = [percentageAttributedText copy];
+    [self drawText];
+}
+
+- (void)setScaleLength:(CGFloat)scaleLength{
+    _scaleLength = scaleLength;
+    self.scaleLeftMaskLayer.lineWidth = scaleLength;
+    self.scaleRightMaskLayer.lineWidth = scaleLength;
+}
+
+- (void)setAllowCoreMotion:(BOOL)allowCoreMotion{
+    _allowCoreMotion = allowCoreMotion;
+    [self startGravity];
 }
 
 #pragma mark - getter
@@ -409,7 +668,6 @@
     if (!_waveLayer) {
         _waveLayer = [CAShapeLayer layer];
         _waveLayer.fillColor = _waterColor.CGColor;
-        _waveLayer.mask = self.maskLayer;
     }
     return _waveLayer;
 }
@@ -420,11 +678,53 @@
     }
     return _waveBackLayer;
 }
-- (CAShapeLayer *)maskLayer{
-    if (!_maskLayer) {
-        _maskLayer = [CAShapeLayer layer];
+- (CAShapeLayer *)scaleBackLayer{
+    if (!_scaleBackLayer) {
+        _scaleBackLayer = [CAShapeLayer layer];
     }
-    return _maskLayer;
+    return _scaleBackLayer;
+}
+- (CAShapeLayer *)scaleLayer{
+    if (!_scaleLayer) {
+        _scaleLayer = [CAShapeLayer layer];
+    }
+    return _scaleLayer;
+}
+- (CAShapeLayer *)scaleLeftLayer{
+    if (!_scaleLeftLayer) {
+        _scaleLeftLayer = [CAShapeLayer layer];
+        _scaleLeftLayer.mask = self.scaleLeftMaskLayer;
+    }
+    return _scaleLeftLayer;
+}
+- (CAShapeLayer *)scaleRightLayer{
+    if (!_scaleRightLayer) {
+        _scaleRightLayer = [CAShapeLayer layer];
+        _scaleRightLayer.mask = self.scaleRightMaskLayer;
+    }
+    return _scaleRightLayer;
+}
+- (CAShapeLayer *)scaleLeftMaskLayer{
+    if (!_scaleLeftMaskLayer) {
+        _scaleLeftMaskLayer = [CAShapeLayer layer];
+        _scaleLeftMaskLayer.lineWidth = _scaleLength;
+        _scaleLeftMaskLayer.strokeColor = [UIColor redColor].CGColor;
+        _scaleLeftMaskLayer.fillColor = [UIColor clearColor].CGColor;
+        _scaleLeftMaskLayer.strokeStart = 0;
+        _scaleLeftMaskLayer.strokeEnd = 0;
+    }
+    return _scaleLeftMaskLayer;
+}
+- (CAShapeLayer *)scaleRightMaskLayer{
+    if (!_scaleRightMaskLayer) {
+        _scaleRightMaskLayer = [CAShapeLayer layer];
+        _scaleRightMaskLayer.lineWidth = _scaleLength;
+        _scaleRightMaskLayer.strokeColor = [UIColor redColor].CGColor;
+        _scaleRightMaskLayer.fillColor = [UIColor clearColor].CGColor;
+        _scaleRightMaskLayer.strokeStart = 0;
+        _scaleRightMaskLayer.strokeEnd = 0;
+    }
+    return _scaleRightMaskLayer;
 }
 - (UILabel *)textLb{
     if (!_textLb) {
@@ -435,18 +735,33 @@
     }
     return _textLb;
 }
+- (CMMotionManager *)motionManager{
+    if (!_motionManager) {
+        _motionManager = [[CMMotionManager alloc] init];
+        _motionManager.deviceMotionUpdateInterval = 0.02;// 0.02; // 50 Hz
+    }
+    return _motionManager;
+}
 
 #pragma mark - layoutSubviews
 - (void)layoutSubviews{
     [super layoutSubviews];
+    
     [self configureDrawingRects];
     currentWavePointY = waveRect.size.height;
-    if (_waveLength==0) {
-        _waveLength = waveRect.size.width*2;
-    }
+ 
+    // 水波
     self.waveBackLayer.frame = waveRect;
-    self.waveLayer.frame = waveRect;
+    self.waveLayer.frame = self.waveBackLayer.bounds;
+    currentTransform = self.waveLayer.affineTransform;
+    // 文本
     self.textLb.frame = waveRect;
+    // 刻度
+    self.scaleBackLayer.frame = scaleRect;
+    self.scaleLayer.frame = scaleRect;
+    self.scaleLeftLayer.frame = CGRectMake(0, 0, scaleRect.size.width/2, scaleRect.size.height);
+    self.scaleRightLayer.frame = CGRectMake(scaleRect.size.width/2, 0, scaleRect.size.width/2, scaleRect.size.height);
+    
 }
 
 @end
