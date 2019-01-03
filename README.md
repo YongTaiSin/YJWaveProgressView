@@ -1,17 +1,17 @@
 # YJWaveProgressView
 一款圆形水波进度控件，高度可定制开发，支持自动布局
 <p align="center">
-<a href="https://github.com/mcyj1314/YJWaveProgressView"><img src="https://img.shields.io/badge/platform-iOS%208.0%2B-ff69b5152950834.svg"></a>
-<a href="https://github.com/mcyj1314/YJWaveProgressView"><img src="https://img.shields.io/cocoapods/v/YJWaveProgressView.svg?style=flat"></a>
-<a href="https://github.com/mcyj1314/YJWaveProgressView/blob/master/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg?style=flat"></a>
+<a href="https://github.com/YongTaiSin/YJWaveProgressView"><img src="https://img.shields.io/badge/platform-iOS%208.0%2B-ff69b5152950834.svg"></a>
+<a href="https://github.com/YongTaiSin/YJWaveProgressView"><img src="https://img.shields.io/cocoapods/v/YJWaveProgressView.svg?style=flat"></a>
+<a href="https://github.com/YongTaiSin/YJWaveProgressView/blob/master/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg?style=flat"></a>
 </p>
 
 ## Demo
 
 <div class="wrap">
-<img src="https://github.com/mcyj1314/YJWaveProgressView/blob/master/screenshots/%E6%B0%B4%E6%B3%A2.gif" alt="">
-<img src="https://github.com/mcyj1314/YJWaveProgressView/blob/master/screenshots/%E5%B8%A6%E5%88%BB%E5%BA%A6.gif" alt="">
-<img src="https://github.com/mcyj1314/YJWaveProgressView/blob/master/screenshots/%E9%87%8D%E5%8A%9B%E6%84%9F%E5%BA%94.gif" alt="">
+<img src="https://github.com/YongTaiSin/YJWaveProgressView/blob/master/screenshots/%E6%B0%B4%E6%B3%A2.gif" alt="">
+<img src="https://github.com/YongTaiSin/YJWaveProgressView/blob/master/screenshots/%E5%B8%A6%E5%88%BB%E5%BA%A6.gif" alt="">
+<img src="https://github.com/YongTaiSin/YJWaveProgressView/blob/master/screenshots/%E9%87%8D%E5%8A%9B%E6%84%9F%E5%BA%94.gif" alt="">
 </div>
    
 ## Installation
